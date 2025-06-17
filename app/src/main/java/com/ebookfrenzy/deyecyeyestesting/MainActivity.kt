@@ -6,6 +6,13 @@ import android.graphics.*
 import android.os.Bundle
 import android.provider.MediaStore
 import android.widget.*
+import android.net.Uri
+import java.io.File
+import android.os.Environment
+import androidx.core.content.FileProvider
+import android.graphics.BitmapFactory
+//import androidx.exifinterface.media.ExifInterface
+
 import androidx.appcompat.app.AppCompatActivity
 import com.ebookfrenzy.deyecyeyestesting.ml.Yolo5s
 import com.ebookfrenzy.deyecyeyestesting.ml.EfficientnetModel
@@ -18,6 +25,8 @@ import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
 
 class MainActivity : AppCompatActivity() {
 
+    private lateinit var photoUri: Uri
+    private lateinit var photoFile: File
     lateinit var imageView: ImageView
     lateinit var takePhoto: Button
     lateinit var choosePhoto: Button
@@ -36,8 +45,14 @@ class MainActivity : AppCompatActivity() {
         resultText = findViewById(R.id.textView2)
 
         takePhoto.setOnClickListener {
-            val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-            startActivityForResult(intent, 2)
+            val photoIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+
+            photoFile = File.createTempFile("IMG_", ".jpg", getExternalFilesDir(Environment.DIRECTORY_PICTURES))
+            photoUri = FileProvider.getUriForFile(this, "$packageName.fileprovider", photoFile)
+
+            photoIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
+            startActivityForResult(photoIntent, 2)
+
         }
 
         choosePhoto.setOnClickListener {
@@ -124,10 +139,11 @@ class MainActivity : AppCompatActivity() {
                 val uri = data.data
                 bitmap = MediaStore.Images.Media.getBitmap(contentResolver, uri)
                 imageView.setImageBitmap(bitmap)
-            } else if (requestCode == 2 && data?.extras?.get("data") != null) {
-                bitmap = data.extras?.get("data") as Bitmap
+            } else if (requestCode == 2 && resultCode == Activity.RESULT_OK) {
+                bitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
                 imageView.setImageBitmap(bitmap)
             }
+        }
         }
     }
 
@@ -200,4 +216,4 @@ class MainActivity : AppCompatActivity() {
         val unionArea = aArea + bArea - intersectionArea
         return if (unionArea == 0f) 0f else intersectionArea / unionArea
     }
-}
+
