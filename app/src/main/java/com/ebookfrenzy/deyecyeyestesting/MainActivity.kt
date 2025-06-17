@@ -52,7 +52,6 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            // === Preprocess image ===
             val imageProcessor = ImageProcessor.Builder()
                 .add(ResizeOp(416, 416, ResizeOp.ResizeMethod.BILINEAR))
                 .add(NormalizeOp(0f, 255f))
@@ -63,7 +62,6 @@ class MainActivity : AppCompatActivity() {
             val processedImage = imageProcessor.process(tensorImage)
             val byteBuffer = processedImage.buffer
 
-            // === YOLO Detection ===
             val model = Yolo5s.newInstance(this)
             val inputFeature = TensorBuffer.createFixedSize(intArrayOf(1, 416, 416, 3), DataType.FLOAT32)
             inputFeature.loadBuffer(byteBuffer)
@@ -78,30 +76,11 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            val bestBox = detections.maxByOrNull { it.confidence }!!
-            val cropped = cropBitmap(bitmap, bestBox.rect)
-
-            // === Classification using EfficientNet ===
-            val classifier = EfficientnetModel.newInstance(this) // replace with your model class
+            val classifier = EfficientnetModel.newInstance(this)
             val resizeProcessor = ImageProcessor.Builder()
                 .add(ResizeOp(240, 240, ResizeOp.ResizeMethod.BILINEAR))
                 .build()
 
-            val tensorInput = TensorImage(DataType.FLOAT32)
-            tensorInput.load(cropped)
-            val inputImg = resizeProcessor.process(tensorInput)
-
-            val classifierInput = TensorBuffer.createFixedSize(intArrayOf(1, 240, 240, 3), DataType.FLOAT32)
-            classifierInput.loadBuffer(inputImg.buffer)
-
-            val classifierOutput = classifier.process(classifierInput)
-            classifier.close()
-
-            val outputProb = classifierOutput.outputFeature0AsTensorBuffer.floatArray
-            val label = if (outputProb[0] > outputProb[1]) "Non-Fresh" else "Fresh"
-            val confidence = outputProb.maxOrNull() ?: 0f
-
-            // === Draw detection box ===
             val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
             val canvas = Canvas(mutableBitmap)
             val paint = Paint().apply {
@@ -109,11 +88,35 @@ class MainActivity : AppCompatActivity() {
                 style = Paint.Style.STROKE
                 strokeWidth = 4f
             }
-            canvas.drawRect(bestBox.rect, paint)
+
+            val stringBuilder = StringBuilder()
+
+            detections.forEachIndexed { index, detection ->
+                val cropped = cropBitmap(bitmap, detection.rect)
+                val tensorInput = TensorImage(DataType.FLOAT32)
+                tensorInput.load(cropped)
+                val inputImg = resizeProcessor.process(tensorInput)
+
+                val classifierInput = TensorBuffer.createFixedSize(intArrayOf(1, 240, 240, 3), DataType.FLOAT32)
+                classifierInput.loadBuffer(inputImg.buffer)
+
+                val classifierOutput = classifier.process(classifierInput)
+                val outputProb = classifierOutput.outputFeature0AsTensorBuffer.floatArray
+
+                val label = if (outputProb[0] > outputProb[1]) "Non-Fresh" else "Fresh"
+                val confidence = outputProb.maxOrNull() ?: 0f
+
+                canvas.drawRect(detection.rect, paint)
+
+                stringBuilder.append("Eye ${index + 1}:\n${detection.rect}\nClassified: $label\nConfidence: ${"%.2f".format(confidence)}\n\n")
+            }
+
+            classifier.close()
 
             imageView.setImageBitmap(mutableBitmap)
-            resultText.text = "Detected Eye:\n${bestBox.rect}\n\nClassified: $label\nConfidence: ${"%.2f".format(confidence)}"
+            resultText.text = stringBuilder.toString().trim()
         }
+
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
