@@ -8,7 +8,7 @@ import android.provider.MediaStore
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import com.ebookfrenzy.deyecyeyestesting.ml.Yolo5s
-import com.ebookfrenzy.deyecyeyestesting.ml.EfficientnetModel // <-- change this to match your model name
+import com.ebookfrenzy.deyecyeyestesting.ml.EfficientnetModel
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.support.image.ImageProcessor
 import org.tensorflow.lite.support.image.TensorImage
@@ -69,7 +69,8 @@ class MainActivity : AppCompatActivity() {
             model.close()
 
             val outputArray = outputs.outputFeature0AsTensorBuffer.floatArray
-            val detections = parseYOLOOutput(outputArray, bitmap.width, bitmap.height)
+            val rawDetections = parseYOLOOutput(outputArray, bitmap.width, bitmap.height)
+            val detections = applyNMS(rawDetections, iouThreshold = 0.4f)
 
             if (detections.isEmpty()) {
                 resultText.text = "No objects detected"
@@ -83,11 +84,6 @@ class MainActivity : AppCompatActivity() {
 
             val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
             val canvas = Canvas(mutableBitmap)
-            val paint = Paint().apply {
-                color = Color.RED
-                style = Paint.Style.STROKE
-                strokeWidth = 4f
-            }
 
             val stringBuilder = StringBuilder()
 
@@ -106,6 +102,12 @@ class MainActivity : AppCompatActivity() {
                 val label = if (outputProb[0] > outputProb[1]) "Non-Fresh" else "Fresh"
                 val confidence = outputProb.maxOrNull() ?: 0f
 
+                val paint = Paint().apply {
+                    color = if (label == "Fresh") Color.GREEN else Color.RED
+                    style = Paint.Style.STROKE
+                    strokeWidth = 4f
+                }
+
                 canvas.drawRect(detection.rect, paint)
 
                 stringBuilder.append("Eye ${index + 1}:\n${detection.rect}\nClassified: $label\nConfidence: ${"%.2f".format(confidence)}\n\n")
@@ -116,7 +118,6 @@ class MainActivity : AppCompatActivity() {
             imageView.setImageBitmap(mutableBitmap)
             resultText.text = stringBuilder.toString().trim()
         }
-
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -167,5 +168,39 @@ class MainActivity : AppCompatActivity() {
         val right = rect.right.toInt().coerceIn(left + 1, bitmap.width)
         val bottom = rect.bottom.toInt().coerceIn(top + 1, bitmap.height)
         return Bitmap.createBitmap(bitmap, left, top, right - left, bottom - top)
+    }
+
+    private fun applyNMS(detections: List<DetectionResult>, iouThreshold: Float = 0.5f): List<DetectionResult> {
+        val sorted = detections.sortedByDescending { it.confidence }.toMutableList()
+        val finalDetections = mutableListOf<DetectionResult>()
+
+        while (sorted.isNotEmpty()) {
+            val best = sorted.removeAt(0)
+            finalDetections.add(best)
+
+            val toRemove = mutableListOf<DetectionResult>()
+            for (other in sorted) {
+                val iou = calculateIoU(best.rect, other.rect)
+                if (iou > iouThreshold) {
+                    toRemove.add(other)
+                }
+            }
+            sorted.removeAll(toRemove)
+        }
+        return finalDetections
+    }
+
+    private fun calculateIoU(a: RectF, b: RectF): Float {
+        val intersectionLeft = maxOf(a.left, b.left)
+        val intersectionTop = maxOf(a.top, b.top)
+        val intersectionRight = minOf(a.right, b.right)
+        val intersectionBottom = minOf(a.bottom, b.bottom)
+
+        val intersectionArea = maxOf(0f, intersectionRight - intersectionLeft) * maxOf(0f, intersectionBottom - intersectionTop)
+        val aArea = (a.right - a.left) * (a.bottom - a.top)
+        val bArea = (b.right - b.left) * (b.bottom - b.top)
+
+        val unionArea = aArea + bArea - intersectionArea
+        return if (unionArea == 0f) 0f else intersectionArea / unionArea
     }
 }
