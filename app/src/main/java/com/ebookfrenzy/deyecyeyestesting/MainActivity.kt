@@ -5,10 +5,10 @@ import android.content.Intent
 import android.graphics.*
 import android.os.Bundle
 import android.provider.MediaStore
-import android.util.Log
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import com.ebookfrenzy.deyecyeyestesting.ml.Yolo5s
+import com.ebookfrenzy.deyecyeyestesting.ml.EfficientnetModel // <-- change this to match your model name
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.support.image.ImageProcessor
 import org.tensorflow.lite.support.image.TensorImage
@@ -63,7 +63,7 @@ class MainActivity : AppCompatActivity() {
             val processedImage = imageProcessor.process(tensorImage)
             val byteBuffer = processedImage.buffer
 
-            // === Run YOLO model ===
+            // === YOLO Detection ===
             val model = Yolo5s.newInstance(this)
             val inputFeature = TensorBuffer.createFixedSize(intArrayOf(1, 416, 416, 3), DataType.FLOAT32)
             inputFeature.loadBuffer(byteBuffer)
@@ -79,8 +79,29 @@ class MainActivity : AppCompatActivity() {
             }
 
             val bestBox = detections.maxByOrNull { it.confidence }!!
+            val cropped = cropBitmap(bitmap, bestBox.rect)
 
-            // === Draw box on original image ===
+            // === Classification using EfficientNet ===
+            val classifier = EfficientnetModel.newInstance(this) // replace with your model class
+            val resizeProcessor = ImageProcessor.Builder()
+                .add(ResizeOp(240, 240, ResizeOp.ResizeMethod.BILINEAR))
+                .build()
+
+            val tensorInput = TensorImage(DataType.FLOAT32)
+            tensorInput.load(cropped)
+            val inputImg = resizeProcessor.process(tensorInput)
+
+            val classifierInput = TensorBuffer.createFixedSize(intArrayOf(1, 240, 240, 3), DataType.FLOAT32)
+            classifierInput.loadBuffer(inputImg.buffer)
+
+            val classifierOutput = classifier.process(classifierInput)
+            classifier.close()
+
+            val outputProb = classifierOutput.outputFeature0AsTensorBuffer.floatArray
+            val label = if (outputProb[0] > outputProb[1]) "Non-Fresh" else "Fresh"
+            val confidence = outputProb.maxOrNull() ?: 0f
+
+            // === Draw detection box ===
             val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
             val canvas = Canvas(mutableBitmap)
             val paint = Paint().apply {
@@ -90,9 +111,8 @@ class MainActivity : AppCompatActivity() {
             }
             canvas.drawRect(bestBox.rect, paint)
 
-            // === Display result ===
             imageView.setImageBitmap(mutableBitmap)
-            resultText.text = "Detected: Confidence=${"%.2f".format(bestBox.confidence)}\nBox=${bestBox.rect}"
+            resultText.text = "Detected Eye:\n${bestBox.rect}\n\nClassified: $label\nConfidence: ${"%.2f".format(confidence)}"
         }
     }
 
@@ -135,9 +155,14 @@ class MainActivity : AppCompatActivity() {
                 results.add(DetectionResult(RectF(left, top, right, bottom), finalConf))
             }
         }
-
         return results
     }
 
-
+    private fun cropBitmap(bitmap: Bitmap, rect: RectF): Bitmap {
+        val left = rect.left.toInt().coerceIn(0, bitmap.width - 1)
+        val top = rect.top.toInt().coerceIn(0, bitmap.height - 1)
+        val right = rect.right.toInt().coerceIn(left + 1, bitmap.width)
+        val bottom = rect.bottom.toInt().coerceIn(top + 1, bitmap.height)
+        return Bitmap.createBitmap(bitmap, left, top, right - left, bottom - top)
+    }
 }
