@@ -73,7 +73,7 @@ class MainActivity : AppCompatActivity() {
             val detections = applyNMS(rawDetections, iouThreshold = 0.4f)
 
             if (detections.isEmpty()) {
-                resultText.text = "No objects detected"
+                resultText.text = "No Eye detected"
                 return@setOnClickListener
             }
 
@@ -84,8 +84,6 @@ class MainActivity : AppCompatActivity() {
 
             val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
             val canvas = Canvas(mutableBitmap)
-
-            val stringBuilder = StringBuilder()
 
             detections.forEachIndexed { index, detection ->
                 val cropped = cropBitmap(bitmap, detection.rect)
@@ -100,7 +98,6 @@ class MainActivity : AppCompatActivity() {
                 val outputProb = classifierOutput.outputFeature0AsTensorBuffer.floatArray
 
                 val label = if (outputProb[0] > outputProb[1]) "Non-Fresh" else "Fresh"
-                val confidence = outputProb.maxOrNull() ?: 0f
 
                 val paint = Paint().apply {
                     color = if (label == "Fresh") Color.GREEN else Color.RED
@@ -109,15 +106,15 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 canvas.drawRect(detection.rect, paint)
-
-                stringBuilder.append("Eye ${index + 1}:\n${detection.rect}\nClassified: $label\nConfidence: ${"%.2f".format(confidence)}\n\n")
             }
 
             classifier.close()
 
             imageView.setImageBitmap(mutableBitmap)
-            resultText.text = stringBuilder.toString().trim()
+            resultText.text = "\uD83D\uDFE9 Fresh   \uD83D\uDFE5 Non-Fresh" // 🟩 🟥
         }
+
+
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
