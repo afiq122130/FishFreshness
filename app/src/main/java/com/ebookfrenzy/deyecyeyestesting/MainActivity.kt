@@ -11,7 +11,7 @@ import java.io.File
 import android.os.Environment
 import androidx.core.content.FileProvider
 import android.graphics.BitmapFactory
-//import androidx.exifinterface.media.ExifInterface
+import androidx.exifinterface.media.ExifInterface
 
 import androidx.appcompat.app.AppCompatActivity
 import com.ebookfrenzy.deyecyeyestesting.ml.Yolo5s
@@ -52,7 +52,6 @@ class MainActivity : AppCompatActivity() {
 
             photoIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
             startActivityForResult(photoIntent, 2)
-
         }
 
         choosePhoto.setOnClickListener {
@@ -128,8 +127,6 @@ class MainActivity : AppCompatActivity() {
             imageView.setImageBitmap(mutableBitmap)
             resultText.text = "\uD83D\uDFE9 Fresh   \uD83D\uDFE5 Non-Fresh" // 🟩 🟥
         }
-
-
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -140,11 +137,30 @@ class MainActivity : AppCompatActivity() {
                 bitmap = MediaStore.Images.Media.getBitmap(contentResolver, uri)
                 imageView.setImageBitmap(bitmap)
             } else if (requestCode == 2 && resultCode == Activity.RESULT_OK) {
-                bitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
+                val fullBitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
+
+                val exif = ExifInterface(photoFile.absolutePath)
+                val orientation = exif.getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL
+                )
+
+                bitmap = when (orientation) {
+                    ExifInterface.ORIENTATION_ROTATE_90 -> rotateBitmap(fullBitmap, 90f)
+                    ExifInterface.ORIENTATION_ROTATE_180 -> rotateBitmap(fullBitmap, 180f)
+                    ExifInterface.ORIENTATION_ROTATE_270 -> rotateBitmap(fullBitmap, 270f)
+                    else -> fullBitmap
+                }
+
                 imageView.setImageBitmap(bitmap)
             }
         }
-        }
+    }
+
+    private fun rotateBitmap(source: Bitmap, angle: Float): Bitmap {
+        val matrix = Matrix()
+        matrix.postRotate(angle)
+        return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
     }
 
     data class DetectionResult(val rect: RectF, val confidence: Float)
@@ -216,4 +232,4 @@ class MainActivity : AppCompatActivity() {
         val unionArea = aArea + bArea - intersectionArea
         return if (unionArea == 0f) 0f else intersectionArea / unionArea
     }
-
+}
