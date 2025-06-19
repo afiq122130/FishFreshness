@@ -16,6 +16,9 @@ import androidx.exifinterface.media.ExifInterface
 import androidx.appcompat.app.AppCompatActivity
 import com.ebookfrenzy.deyecyeyestesting.ml.Yolo5s
 import com.ebookfrenzy.deyecyeyestesting.ml.EfficientnetModel
+import com.ebookfrenzy.deyecyeyestesting.ml.ImprovisedValidFalseEfficientnetModel
+import com.ebookfrenzy.deyecyeyestesting.ml.ImprovisedValidTrueEfficientnetModel
+import com.ebookfrenzy.deyecyeyestesting.ml.Yolo5sImprovised
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.support.image.ImageProcessor
 import org.tensorflow.lite.support.image.TensorImage
@@ -76,7 +79,10 @@ class MainActivity : AppCompatActivity() {
             val processedImage = imageProcessor.process(tensorImage)
             val byteBuffer = processedImage.buffer
 
-            val model = Yolo5s.newInstance(this)
+            //Test other model
+            //val model = Yolo5s.newInstance(this)
+            val model = Yolo5sImprovised.newInstance(this)
+
             val inputFeature = TensorBuffer.createFixedSize(intArrayOf(1, 416, 416, 3), DataType.FLOAT32)
             inputFeature.loadBuffer(byteBuffer)
             val outputs = model.process(inputFeature)
@@ -91,7 +97,12 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            val classifier = EfficientnetModel.newInstance(this)
+            //Try new model
+            //val classifier = EfficientnetModel.newInstance(this)
+            //val classifier = ImprovisedValidFalseEfficientnetModel.newInstance(this)
+            val classifier = ImprovisedValidTrueEfficientnetModel.newInstance(this)
+
+
             val resizeProcessor = ImageProcessor.Builder()
                 .add(ResizeOp(240, 240, ResizeOp.ResizeMethod.BILINEAR))
                 .build()
